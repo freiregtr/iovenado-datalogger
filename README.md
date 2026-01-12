@@ -118,7 +118,7 @@ python3 -m venv --system-site-packages venv
 source venv/bin/activate
 
 # 6. Verificar que bluetooth es accesible desde el venv
-python3 -c "import bluetooth; print('✓ Bluetooth module OK')"
+python -c "import bluetooth; print('✓ Bluetooth module OK')"
 # Si da error, recrear venv con: rm -rf venv && python3 -m venv --system-site-packages venv
 
 # 7. Instalar dependencias Python (pybluez se usa del sistema, no de pip)
