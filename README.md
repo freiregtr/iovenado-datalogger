@@ -144,6 +144,17 @@ sudo journalctl -u iovenado-bt -f
 - Se instala directamente desde el repositorio de GitHub que tiene la versión actualizada
 - El comando `pip install git+https://github.com/pybluez/pybluez.git` instala la última versión compatible
 
+**¿Qué hace el servicio Bluetooth?**
+
+El script `install_service.sh` configura un servicio systemd que:
+- Arranca automáticamente al encender la Raspberry Pi
+- Ejecuta `bt_server.py` que escucha conexiones Bluetooth
+- Permite controlar el datalogger desde la app Android
+- Se reinicia automáticamente si falla
+- Logs disponibles con `journalctl -u iovenado-bt -f`
+
+El servicio queda configurado en `/etc/systemd/system/iovenado-bt.service` y usa el Python del venv para ejecutar el servidor Bluetooth.
+
 ---
 
 ## Estructura de Archivos
