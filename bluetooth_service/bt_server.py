@@ -18,6 +18,7 @@ import sys
 import json
 import subprocess
 import time
+import socket
 from datetime import datetime
 from zipfile import ZipFile
 from pathlib import Path
@@ -74,7 +75,7 @@ class BluetoothDataloggerServer:
             self.server_sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
 
             # Set socket options for better compatibility
-            self.server_sock.setsockopt(bluetooth.SOL_RFCOMM, bluetooth.SO_REUSEADDR, 1)
+            self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
             # Bind to channel 2 specifically (channel 1 is occupied by BlueZ Serial Port)
             try:
