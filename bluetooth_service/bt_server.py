@@ -338,12 +338,19 @@ class BluetoothDataloggerServer:
             Status message (actual file is sent separately)
         """
         try:
+            print(f"[BTServer] _send_csv_file called with filename: '{filename}'")
+
             # Build file path
             # If filename doesn't end with .zip, assume it's a session ID
             if not filename.endswith('.zip'):
+                print(f"[BTServer] Filename doesn't end with .zip, adding prefix")
                 filename = f"session_{filename}.zip"
+            else:
+                print(f"[BTServer] Filename already ends with .zip, using as-is")
 
+            print(f"[BTServer] Final filename: '{filename}'")
             filepath = os.path.join(self.data_dir, filename)
+            print(f"[BTServer] Looking for file at: {filepath}")
 
             # Check if file exists
             if not os.path.exists(filepath):
