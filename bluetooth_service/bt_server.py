@@ -122,12 +122,12 @@ class BluetoothDataloggerServer:
                     # Handle client commands
                     self._handle_client()
 
-                except socket.timeout:
-                    # Timeout is normal - allows checking self.running
-                    continue
-
                 except bluetooth.BluetoothError as e:
-                    if self.running:
+                    # PyBluez converts socket.timeout to BluetoothError with message "timed out"
+                    if str(e) == "timed out":
+                        # Timeout is normal - allows checking self.running
+                        continue
+                    elif self.running:
                         print(f"[BTServer] Bluetooth error: {e}")
                         import traceback
                         traceback.print_exc()
