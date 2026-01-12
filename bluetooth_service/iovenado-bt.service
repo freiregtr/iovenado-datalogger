@@ -1,0 +1,17 @@
+[Unit]
+Description=iOvenado Bluetooth Datalogger Service
+After=bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/iovenado/datalogger
+ExecStart=/usr/bin/python3 /home/pi/iovenado/datalogger/bluetooth_service/bt_server.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

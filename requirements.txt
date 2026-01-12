@@ -1,0 +1,10 @@
+# IOVENADO DataLogger - Dependencies
+
+# Qt framework for Python
+PySide6>=6.5.0
+
+# Serial communication
+pyserial>=3.5
+
+# Bluetooth communication (for remote control)
+pybluez>=0.23
