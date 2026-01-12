@@ -99,29 +99,26 @@ python main.py --mock
 ```bash
 # 1. Instalar dependencias del sistema
 sudo apt-get update
-sudo apt-get install -y bluetooth libbluetooth-dev python3-pip python3-venv python3-bluez
+sudo apt-get install -y bluetooth libbluetooth-dev python3-pip python3-venv git
 
-# 2. Verificar que python3-bluez está instalado correctamente
-dpkg -l | grep python3-bluez
-# Debe mostrar: ii  python3-bluez  0.xx
-
-# 3. Clonar repositorio
+# 2. Clonar repositorio
 cd /home/pi
 git clone https://github.com/freiregtr/iovenado-datalogger.git
 cd iovenado-datalogger
 
-# 4. Crear virtual environment CON ACCESO a paquetes del sistema
-#    IMPORTANTE: usar --system-site-packages para acceder a python3-bluez
-python3 -m venv --system-site-packages venv
+# 3. Crear virtual environment
+python3 -m venv venv
 
-# 5. Activar venv
+# 4. Activar venv
 source venv/bin/activate
 
-# 6. Verificar que bluetooth es accesible desde el venv
-python -c "import bluetooth; print('✓ Bluetooth module OK')"
-# Si da error, recrear venv con: rm -rf venv && python3 -m venv --system-site-packages venv
+# 5. Instalar PyBluez desde GitHub (evita problemas con setuptools)
+pip install git+https://github.com/pybluez/pybluez.git#egg=pybluez
 
-# 7. Instalar dependencias Python (pybluez se usa del sistema, no de pip)
+# 6. Verificar que bluetooth está instalado correctamente
+python -c "import bluetooth; print('✓ Bluetooth module OK')"
+
+# 7. Instalar resto de dependencias Python
 pip install -r requirements.txt
 
 # 8. Probar en modo GUI (requiere X server)
@@ -143,10 +140,9 @@ sudo journalctl -u iovenado-bt -f
 ```
 
 **Nota importante sobre PyBluez:**
-- PyBluez NO se instala via pip debido a incompatibilidades con setuptools moderno
-- Se usa el paquete del sistema `python3-bluez` instalado con apt
-- El venv DEBE crearse con `--system-site-packages` para acceder a este paquete
-- Si olvidaste usar `--system-site-packages`, debes recrear el venv
+- PyBluez del PyPI tiene problemas con setuptools moderno (error use_2to3)
+- Se instala directamente desde el repositorio de GitHub que tiene la versión actualizada
+- El comando `pip install git+https://github.com/pybluez/pybluez.git` instala la última versión compatible
 
 ---
 

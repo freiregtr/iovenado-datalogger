@@ -38,7 +38,7 @@ fi
 # Install system dependencies
 echo "Installing system dependencies..."
 apt-get update
-apt-get install -y bluetooth libbluetooth-dev python3-pip python3-venv python3-bluez
+apt-get install -y bluetooth libbluetooth-dev python3-pip python3-venv git
 
 # Check if venv exists in parent directory
 PARENT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -49,17 +49,15 @@ if [ ! -d "$VENV_DIR" ]; then
     echo "ERROR: Virtual environment not found at $VENV_DIR"
     echo "Please run these commands first:"
     echo "  cd $PARENT_DIR"
-    echo "  python3 -m venv --system-site-packages venv"
+    echo "  python3 -m venv venv"
     echo "  source venv/bin/activate"
+    echo "  pip install git+https://github.com/pybluez/pybluez.git#egg=pybluez"
     echo "  pip install -r requirements.txt"
-    echo
-    echo "Note: python3-bluez will be used from system packages"
     exit 1
 fi
 
 echo
 echo "Using virtual environment: $VENV_DIR"
-echo "Note: python3-bluez installed from system packages"
 
 # Copy service file to systemd
 echo
