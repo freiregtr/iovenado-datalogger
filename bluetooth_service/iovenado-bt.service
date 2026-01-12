@@ -5,7 +5,7 @@ Requires=bluetooth.service
 
 [Service]
 Type=simple
-User=iovenado
+User=root
 WorkingDirectory=/home/iovenado/iovenado-datalogger
 ExecStartPre=/usr/bin/hciconfig hci0 up
 ExecStartPre=/usr/bin/hciconfig hci0 piscan
