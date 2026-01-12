@@ -77,7 +77,20 @@ sudo bash bluetooth_service/install_service.sh
 
 ```bash
 cd datalogger
+
+# Crear virtual environment
+python -m venv venv
+
+# Activar venv (Windows)
+venv\Scripts\activate
+
+# Activar venv (Linux/Mac)
+source venv/bin/activate
+
+# Instalar dependencias
 pip install -r requirements.txt
+
+# Probar con datos simulados
 python main.py --mock
 ```
 
@@ -86,21 +99,27 @@ python main.py --mock
 ```bash
 # Instalar dependencias del sistema
 sudo apt-get update
-sudo apt-get install -y bluetooth libbluetooth-dev python3-pip
+sudo apt-get install -y bluetooth libbluetooth-dev python3-pip python3-venv
 
 # Clonar repositorio
 cd /home/pi
-git clone <repository_url> iovenado
-cd iovenado/datalogger
+git clone https://github.com/freiregtr/iovenado-datalogger.git
+cd iovenado-datalogger
+
+# Crear virtual environment
+python3 -m venv venv
+
+# Activar venv
+source venv/bin/activate
 
 # Instalar dependencias Python
-pip3 install -r requirements.txt
+pip install -r requirements.txt
 
 # Probar en modo GUI
-python3 main.py --mock
+python main.py --mock
 
 # Probar en modo headless
-python3 main.py --headless --mock --record --duration 30
+python main.py --headless --mock --record --duration 30
 
 # Instalar servicio Bluetooth
 cd bluetooth_service

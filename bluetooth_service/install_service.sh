@@ -38,12 +38,25 @@ fi
 # Install system dependencies
 echo "Installing system dependencies..."
 apt-get update
-apt-get install -y bluetooth libbluetooth-dev python3-pip
+apt-get install -y bluetooth libbluetooth-dev python3-pip python3-venv
 
-# Install Python dependencies
+# Check if venv exists in parent directory
+PARENT_DIR="$(dirname "$SCRIPT_DIR")"
+VENV_DIR="$PARENT_DIR/venv"
+
+if [ ! -d "$VENV_DIR" ]; then
+    echo
+    echo "ERROR: Virtual environment not found at $VENV_DIR"
+    echo "Please run these commands first:"
+    echo "  cd $PARENT_DIR"
+    echo "  python3 -m venv venv"
+    echo "  source venv/bin/activate"
+    echo "  pip install -r requirements.txt"
+    exit 1
+fi
+
 echo
-echo "Installing Python dependencies..."
-pip3 install pybluez pyserial PySide6
+echo "Using virtual environment: $VENV_DIR"
 
 # Copy service file to systemd
 echo
