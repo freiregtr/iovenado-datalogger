@@ -235,10 +235,12 @@ class BluetoothDataloggerServer:
 
         elif command.startswith("GET_CSV"):
             # Extract filename
+            print(f"[BTServer] Received GET_CSV command: '{command}'")
             parts = command.split(" ", 1)
             if len(parts) < 2:
                 return "ERROR: Missing filename"
             filename = parts[1].strip()
+            print(f"[BTServer] Extracted filename from command: '{filename}'")
             return self._send_csv_file(filename)
 
         else:
