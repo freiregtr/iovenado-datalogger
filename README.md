@@ -99,20 +99,20 @@ python main.py --mock
 ```bash
 # Instalar dependencias del sistema
 sudo apt-get update
-sudo apt-get install -y bluetooth libbluetooth-dev python3-pip python3-venv
+sudo apt-get install -y bluetooth libbluetooth-dev python3-pip python3-venv python3-bluez
 
 # Clonar repositorio
 cd /home/pi
 git clone https://github.com/freiregtr/iovenado-datalogger.git
 cd iovenado-datalogger
 
-# Crear virtual environment
-python3 -m venv venv
+# Crear virtual environment con acceso a paquetes del sistema
+python3 -m venv --system-site-packages venv
 
 # Activar venv
 source venv/bin/activate
 
-# Instalar dependencias Python
+# Instalar dependencias Python (pybluez se usará del sistema)
 pip install -r requirements.txt
 
 # Probar en modo GUI

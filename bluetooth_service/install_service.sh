@@ -38,7 +38,7 @@ fi
 # Install system dependencies
 echo "Installing system dependencies..."
 apt-get update
-apt-get install -y bluetooth libbluetooth-dev python3-pip python3-venv
+apt-get install -y bluetooth libbluetooth-dev python3-pip python3-venv python3-bluez
 
 # Check if venv exists in parent directory
 PARENT_DIR="$(dirname "$SCRIPT_DIR")"

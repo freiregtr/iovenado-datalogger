@@ -7,4 +7,7 @@ PySide6>=6.5.0
 pyserial>=3.5
 
 # Bluetooth communication (for remote control)
-pybluez>=0.23
+# Note: pybluez has issues with setuptools>=58
+# Install manually with: pip install git+https://github.com/pybluez/pybluez.git#egg=pybluez
+# Or on Raspberry Pi: sudo apt-get install python3-bluez
+pybluez>=0.23; platform_system == "Linux"
