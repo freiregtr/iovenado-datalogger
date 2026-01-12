@@ -73,12 +73,22 @@ class BluetoothDataloggerServer:
             # Create Bluetooth socket
             self.server_sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
 
-            # Bind to any available port
-            self.server_sock.bind(("", bluetooth.PORT_ANY))
-            port = self.server_sock.getsockname()[1]
+            # Set socket options for better compatibility
+            self.server_sock.setsockopt(bluetooth.SOL_RFCOMM, bluetooth.SO_REUSEADDR, 1)
 
-            # Listen for incoming connections
-            self.server_sock.listen(1)
+            # Bind to channel 2 specifically (channel 1 is occupied by BlueZ Serial Port)
+            try:
+                self.server_sock.bind(("", 2))
+                port = 2
+                print(f"[BTServer] Bound to channel 2 (fixed)")
+            except:
+                # If channel 2 is not available, use any available port
+                self.server_sock.bind(("", bluetooth.PORT_ANY))
+                port = self.server_sock.getsockname()[1]
+                print(f"[BTServer] Channel 2 not available, using channel {port}")
+
+            # Listen for incoming connections (backlog of 5)
+            self.server_sock.listen(5)
 
             # Advertise service
             bluetooth.advertise_service(
@@ -93,25 +103,32 @@ class BluetoothDataloggerServer:
             print(f"[BTServer] Waiting for connections...")
             print(f"[BTServer] Service Name: {self.SERVICE_NAME}")
             print(f"[BTServer] UUID: {self.SPP_UUID}")
+            print(f"[BTServer] Socket listening with timeout=None (blocking)")
 
             self.running = True
 
             # Main server loop
             while self.running:
                 try:
+                    print(f"[BTServer] Waiting for client connection... (blocking)")
+
                     # Accept incoming connection
                     self.client_sock, self.client_info = self.server_sock.accept()
-                    print(f"[BTServer] Client connected: {self.client_info}")
+                    print(f"[BTServer] *** CLIENT CONNECTED *** : {self.client_info}")
 
                     # Handle client commands
                     self._handle_client()
 
                 except bluetooth.BluetoothError as e:
                     print(f"[BTServer] Bluetooth error: {e}")
+                    import traceback
+                    traceback.print_exc()
                     time.sleep(1)
 
                 except Exception as e:
                     print(f"[BTServer] Error: {e}")
+                    import traceback
+                    traceback.print_exc()
                     time.sleep(1)
 
         except KeyboardInterrupt:
