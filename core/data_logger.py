@@ -2,11 +2,12 @@
 IOVENADO DataLogger - CSV Data Logger
 
 Handles recording sensor data to CSV files.
-Creates separate CSV files for each sensor type.
+Creates a single unified CSV file with all sensor data.
 """
 
 import os
 import csv
+import json
 from datetime import datetime
 from typing import List, Dict, Optional
 from zipfile import ZipFile
@@ -17,7 +18,7 @@ from .packet import SensorPacket, CANMessage
 class CSVDataLogger:
     """
     Manages recording of sensor data to CSV files.
-    Creates one CSV file per sensor type (GPS, Lidar, CO2, CAN).
+    Creates one unified CSV file with all sensor data.
     """
 
     def __init__(self, output_dir: str = "./data"):
@@ -30,8 +31,8 @@ class CSVDataLogger:
         self.output_dir = output_dir
         self.session_id: Optional[str] = None
         self.is_recording = False
-        self.csv_files: Dict[str, any] = {}
-        self.csv_writers: Dict[str, csv.DictWriter] = {}
+        self.csv_file = None
+        self.csv_writer: Optional[csv.DictWriter] = None
         self.packet_count = 0
 
         # Create output directory if it doesn't exist
@@ -40,7 +41,7 @@ class CSVDataLogger:
     def start_session(self) -> str:
         """
         Start a new recording session.
-        Creates CSV files with headers.
+        Creates CSV file with headers.
 
         Returns:
             session_id (timestamp string)
@@ -52,8 +53,8 @@ class CSVDataLogger:
         self.session_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.packet_count = 0
 
-        # Open CSV files
-        self._open_csv_files()
+        # Open CSV file
+        self._open_csv_file()
 
         self.is_recording = True
         print(f"[DataLogger] Started session: {self.session_id}")
@@ -63,21 +64,34 @@ class CSVDataLogger:
     def stop_session(self):
         """
         Stop the current recording session.
-        Closes all CSV files.
+        Closes CSV file and automatically creates ZIP archive.
         """
         if not self.is_recording:
             return
 
-        # Close all CSV files
-        self._close_csv_files()
+        # Close CSV file
+        self._close_csv_file()
 
         print(f"[DataLogger] Stopped session: {self.session_id} ({self.packet_count} packets)")
+
+        # Automatically compress to ZIP
+        try:
+            zip_path = self._create_session_zip()
+            print(f"[DataLogger] Created ZIP archive: {zip_path}")
+
+            # Delete original CSV file after successful compression
+            csv_path = os.path.join(self.output_dir, f"session_{self.session_id}.csv")
+            if os.path.exists(csv_path):
+                os.remove(csv_path)
+                print(f"[DataLogger] Cleaned up CSV file")
+        except Exception as e:
+            print(f"[DataLogger] Warning: Failed to create ZIP archive: {e}")
 
         self.is_recording = False
 
     def write_packet(self, packet: SensorPacket):
         """
-        Write a sensor packet to CSV files.
+        Write a sensor packet to CSV file.
 
         Args:
             packet: SensorPacket to write
@@ -85,52 +99,47 @@ class CSVDataLogger:
         if not self.is_recording:
             return
 
-        # Write GPS data
-        self.csv_writers['gps'].writerow({
+        # Convert CAN messages to JSON string for compact storage
+        can_messages_json = json.dumps([
+            {
+                'id': f'0x{msg.id:03X}',
+                'dlc': msg.dlc,
+                'data': msg.to_hex_string(),
+                'decoded': self._decode_can_message(msg)
+            }
+            for msg in packet.can_messages
+        ]) if packet.can_messages else "[]"
+
+        # Write unified row with all sensor data
+        self.csv_writer.writerow({
             'timestamp_ms': packet.timestamp,
-            'latitude': packet.latitude,
-            'longitude': packet.longitude,
-            'speed_knots': packet.speed_knots,
-            'speed_kmh': packet.speed_kmh,
+            # GPS data
+            'gps_latitude': packet.latitude,
+            'gps_longitude': packet.longitude,
+            'gps_speed_knots': packet.speed_knots,
+            'gps_speed_kmh': packet.speed_kmh,
             'gps_fix': packet.gps_fix,
-            'gps_connected': packet.gps_connected
-        })
-
-        # Write Lidar data
-        self.csv_writers['lidar'].writerow({
-            'timestamp_ms': packet.timestamp,
-            'distance_cm': packet.distance_cm,
-            'distance_m': packet.distance_m,
+            'gps_connected': packet.gps_connected,
+            # Lidar data
+            'lidar_distance_cm': packet.distance_cm,
+            'lidar_distance_m': packet.distance_m,
             'lidar_strength': packet.lidar_strength,
-            'lidar_connected': packet.lidar_connected
-        })
-
-        # Write CO2 data
-        self.csv_writers['co2'].writerow({
-            'timestamp_ms': packet.timestamp,
+            'lidar_connected': packet.lidar_connected,
+            # CO2 data
             'co2_ppm': packet.co2_ppm,
-            'co2_connected': packet.co2_connected
+            'co2_connected': packet.co2_connected,
+            # CAN bus data (as JSON array)
+            'can_messages': can_messages_json
         })
 
-        # Write CAN bus data (multiple messages per packet)
-        for can_msg in packet.can_messages:
-            self.csv_writers['canbus'].writerow({
-                'timestamp_ms': packet.timestamp,
-                'can_id': f'0x{can_msg.id:03X}',
-                'dlc': can_msg.dlc,
-                'data_hex': can_msg.to_hex_string(),
-                'decoded': self._decode_can_message(can_msg)
-            })
-
-        # Flush files every 10 packets to avoid data loss
+        # Flush file every 10 packets to avoid data loss
         self.packet_count += 1
         if self.packet_count % 10 == 0:
-            for f in self.csv_files.values():
-                f.flush()
+            self.csv_file.flush()
 
     def get_session_files(self) -> List[str]:
         """
-        Get list of CSV file paths for current session.
+        Get list of CSV/ZIP file paths for current session.
 
         Returns:
             List of absolute file paths
@@ -139,18 +148,24 @@ class CSVDataLogger:
             return []
 
         files = []
-        for sensor in ['gps', 'lidar', 'co2', 'canbus']:
-            filename = f"{sensor}_{self.session_id}.csv"
-            filepath = os.path.join(self.output_dir, filename)
-            if os.path.exists(filepath):
-                files.append(filepath)
+
+        # Check for ZIP file (preferred)
+        zip_path = os.path.join(self.output_dir, f"session_{self.session_id}.zip")
+        if os.path.exists(zip_path):
+            files.append(zip_path)
+
+        # Check for CSV file (if ZIP doesn't exist)
+        csv_path = os.path.join(self.output_dir, f"session_{self.session_id}.csv")
+        if os.path.exists(csv_path):
+            files.append(csv_path)
 
         return files
 
     def export_session_zip(self, session_id: Optional[str] = None,
                           output_path: Optional[str] = None) -> str:
         """
-        Export session CSV files to a ZIP archive.
+        Export session CSV file to a ZIP archive.
+        (This is now automatically called by stop_session, but kept for manual use)
 
         Args:
             session_id: Session ID to export (default: current session)
@@ -165,16 +180,12 @@ class CSVDataLogger:
         if not session_id:
             raise ValueError("No session to export")
 
-        # Find all CSV files for this session
-        csv_files = []
-        for sensor in ['gps', 'lidar', 'co2', 'canbus']:
-            filename = f"{sensor}_{session_id}.csv"
-            filepath = os.path.join(self.output_dir, filename)
-            if os.path.exists(filepath):
-                csv_files.append(filepath)
+        # Find CSV file for this session
+        csv_filename = f"session_{session_id}.csv"
+        csv_path = os.path.join(self.output_dir, csv_filename)
 
-        if not csv_files:
-            raise FileNotFoundError(f"No CSV files found for session {session_id}")
+        if not os.path.exists(csv_path):
+            raise FileNotFoundError(f"No CSV file found for session {session_id}")
 
         # Generate ZIP file path
         if output_path is None:
@@ -182,64 +193,62 @@ class CSVDataLogger:
 
         # Create ZIP archive
         with ZipFile(output_path, 'w') as zipf:
-            for filepath in csv_files:
-                # Add file to ZIP with just the filename (no path)
-                zipf.write(filepath, os.path.basename(filepath))
+            zipf.write(csv_path, os.path.basename(csv_path))
 
         print(f"[DataLogger] Exported session to: {output_path}")
         return output_path
 
-    def _open_csv_files(self):
-        """Open CSV files and write headers"""
-        # GPS CSV
-        gps_filename = f"gps_{self.session_id}.csv"
-        gps_path = os.path.join(self.output_dir, gps_filename)
-        self.csv_files['gps'] = open(gps_path, 'w', newline='')
-        self.csv_writers['gps'] = csv.DictWriter(
-            self.csv_files['gps'],
-            fieldnames=['timestamp_ms', 'latitude', 'longitude', 'speed_knots',
-                       'speed_kmh', 'gps_fix', 'gps_connected']
-        )
-        self.csv_writers['gps'].writeheader()
+    def _open_csv_file(self):
+        """Open CSV file and write header"""
+        csv_filename = f"session_{self.session_id}.csv"
+        csv_path = os.path.join(self.output_dir, csv_filename)
 
-        # Lidar CSV
-        lidar_filename = f"lidar_{self.session_id}.csv"
-        lidar_path = os.path.join(self.output_dir, lidar_filename)
-        self.csv_files['lidar'] = open(lidar_path, 'w', newline='')
-        self.csv_writers['lidar'] = csv.DictWriter(
-            self.csv_files['lidar'],
-            fieldnames=['timestamp_ms', 'distance_cm', 'distance_m',
-                       'lidar_strength', 'lidar_connected']
-        )
-        self.csv_writers['lidar'].writeheader()
+        self.csv_file = open(csv_path, 'w', newline='')
 
-        # CO2 CSV
-        co2_filename = f"co2_{self.session_id}.csv"
-        co2_path = os.path.join(self.output_dir, co2_filename)
-        self.csv_files['co2'] = open(co2_path, 'w', newline='')
-        self.csv_writers['co2'] = csv.DictWriter(
-            self.csv_files['co2'],
-            fieldnames=['timestamp_ms', 'co2_ppm', 'co2_connected']
-        )
-        self.csv_writers['co2'].writeheader()
+        # Define all columns for unified CSV
+        fieldnames = [
+            'timestamp_ms',
+            # GPS columns
+            'gps_latitude', 'gps_longitude', 'gps_speed_knots', 'gps_speed_kmh',
+            'gps_fix', 'gps_connected',
+            # Lidar columns
+            'lidar_distance_cm', 'lidar_distance_m', 'lidar_strength', 'lidar_connected',
+            # CO2 columns
+            'co2_ppm', 'co2_connected',
+            # CAN bus (JSON array of messages)
+            'can_messages'
+        ]
 
-        # CAN bus CSV
-        canbus_filename = f"canbus_{self.session_id}.csv"
-        canbus_path = os.path.join(self.output_dir, canbus_filename)
-        self.csv_files['canbus'] = open(canbus_path, 'w', newline='')
-        self.csv_writers['canbus'] = csv.DictWriter(
-            self.csv_files['canbus'],
-            fieldnames=['timestamp_ms', 'can_id', 'dlc', 'data_hex', 'decoded']
-        )
-        self.csv_writers['canbus'].writeheader()
+        self.csv_writer = csv.DictWriter(self.csv_file, fieldnames=fieldnames)
+        self.csv_writer.writeheader()
 
-    def _close_csv_files(self):
-        """Close all CSV files"""
-        for f in self.csv_files.values():
-            f.close()
+    def _close_csv_file(self):
+        """Close CSV file"""
+        if self.csv_file:
+            self.csv_file.close()
+            self.csv_file = None
+            self.csv_writer = None
 
-        self.csv_files.clear()
-        self.csv_writers.clear()
+    def _create_session_zip(self) -> str:
+        """
+        Create ZIP archive for current session.
+        Internal method called automatically by stop_session.
+
+        Returns:
+            Path to created ZIP file
+        """
+        csv_filename = f"session_{self.session_id}.csv"
+        csv_path = os.path.join(self.output_dir, csv_filename)
+
+        if not os.path.exists(csv_path):
+            raise FileNotFoundError(f"CSV file not found: {csv_path}")
+
+        zip_path = os.path.join(self.output_dir, f"session_{self.session_id}.zip")
+
+        with ZipFile(zip_path, 'w') as zipf:
+            zipf.write(csv_path, os.path.basename(csv_path))
+
+        return zip_path
 
     def _decode_can_message(self, msg: CANMessage) -> str:
         """
