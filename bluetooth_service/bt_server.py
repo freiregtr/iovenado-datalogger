@@ -19,6 +19,7 @@ import json
 import subprocess
 import time
 import socket
+import signal
 from datetime import datetime
 from zipfile import ZipFile
 from pathlib import Path
@@ -77,6 +78,9 @@ class BluetoothDataloggerServer:
             # Set socket options for better compatibility
             self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
+            # Set socket timeout to allow checking self.running periodically
+            self.server_sock.settimeout(1.0)
+
             # Bind to channel 2 specifically (channel 1 is occupied by BlueZ Serial Port)
             try:
                 self.server_sock.bind(("", 2))
@@ -104,33 +108,37 @@ class BluetoothDataloggerServer:
             print(f"[BTServer] Waiting for connections...")
             print(f"[BTServer] Service Name: {self.SERVICE_NAME}")
             print(f"[BTServer] UUID: {self.SPP_UUID}")
-            print(f"[BTServer] Socket listening with timeout=None (blocking)")
+            print(f"[BTServer] Socket timeout: 1.0s (allows graceful shutdown)")
 
             self.running = True
 
             # Main server loop
             while self.running:
                 try:
-                    print(f"[BTServer] Waiting for client connection... (blocking)")
-
-                    # Accept incoming connection
+                    # Accept incoming connection (with timeout)
                     self.client_sock, self.client_info = self.server_sock.accept()
                     print(f"[BTServer] *** CLIENT CONNECTED *** : {self.client_info}")
 
                     # Handle client commands
                     self._handle_client()
 
+                except socket.timeout:
+                    # Timeout is normal - allows checking self.running
+                    continue
+
                 except bluetooth.BluetoothError as e:
-                    print(f"[BTServer] Bluetooth error: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    time.sleep(1)
+                    if self.running:
+                        print(f"[BTServer] Bluetooth error: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        time.sleep(1)
 
                 except Exception as e:
-                    print(f"[BTServer] Error: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    time.sleep(1)
+                    if self.running:
+                        print(f"[BTServer] Error: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        time.sleep(1)
 
         except KeyboardInterrupt:
             print("\n[BTServer] Interrupted by user")
@@ -386,6 +394,14 @@ def main():
 
     # Create and start server
     server = BluetoothDataloggerServer()
+
+    # Set up signal handlers for graceful shutdown
+    def signal_handler(signum, frame):
+        print(f"\n[BTServer] Received signal {signum}, shutting down gracefully...")
+        server.running = False
+
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
 
     try:
         server.start_server()
