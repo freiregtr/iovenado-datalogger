@@ -97,34 +97,56 @@ python main.py --mock
 ### En Raspberry Pi 5
 
 ```bash
-# Instalar dependencias del sistema
+# 1. Instalar dependencias del sistema
 sudo apt-get update
 sudo apt-get install -y bluetooth libbluetooth-dev python3-pip python3-venv python3-bluez
 
-# Clonar repositorio
+# 2. Verificar que python3-bluez está instalado correctamente
+dpkg -l | grep python3-bluez
+# Debe mostrar: ii  python3-bluez  0.xx
+
+# 3. Clonar repositorio
 cd /home/pi
 git clone https://github.com/freiregtr/iovenado-datalogger.git
 cd iovenado-datalogger
 
-# Crear virtual environment con acceso a paquetes del sistema
+# 4. Crear virtual environment CON ACCESO a paquetes del sistema
+#    IMPORTANTE: usar --system-site-packages para acceder a python3-bluez
 python3 -m venv --system-site-packages venv
 
-# Activar venv
+# 5. Activar venv
 source venv/bin/activate
 
-# Instalar dependencias Python (pybluez se usará del sistema)
+# 6. Verificar que bluetooth es accesible desde el venv
+python3 -c "import bluetooth; print('✓ Bluetooth module OK')"
+# Si da error, recrear venv con: rm -rf venv && python3 -m venv --system-site-packages venv
+
+# 7. Instalar dependencias Python (pybluez se usa del sistema, no de pip)
 pip install -r requirements.txt
 
-# Probar en modo GUI
+# 8. Probar en modo GUI (requiere X server)
 python main.py --mock
 
-# Probar en modo headless
+# 9. Probar en modo headless (sin GUI, genera CSVs)
 python main.py --headless --mock --record --duration 30
 
-# Instalar servicio Bluetooth
+# 10. Verificar que se generaron archivos CSV
+ls -lh data/
+
+# 11. Instalar servicio Bluetooth para autoarranque
 cd bluetooth_service
 sudo bash install_service.sh
+
+# 12. Verificar servicio
+sudo systemctl status iovenado-bt
+sudo journalctl -u iovenado-bt -f
 ```
+
+**Nota importante sobre PyBluez:**
+- PyBluez NO se instala via pip debido a incompatibilidades con setuptools moderno
+- Se usa el paquete del sistema `python3-bluez` instalado con apt
+- El venv DEBE crearse con `--system-site-packages` para acceder a este paquete
+- Si olvidaste usar `--system-site-packages`, debes recrear el venv
 
 ---
 
