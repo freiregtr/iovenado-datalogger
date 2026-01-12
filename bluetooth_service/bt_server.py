@@ -219,24 +219,27 @@ class BluetoothDataloggerServer:
         Returns:
             Response string
         """
-        command = command.upper().strip()
+        command = command.strip()
 
-        if command == "START_DATALOGGER":
+        # Extract command verb (first word) and convert to uppercase for comparison
+        parts = command.split(" ", 1)
+        command_verb = parts[0].upper()
+
+        if command_verb == "START_DATALOGGER":
             return self._start_datalogger()
 
-        elif command == "STOP_DATALOGGER":
+        elif command_verb == "STOP_DATALOGGER":
             return self._stop_datalogger()
 
-        elif command == "GET_STATUS":
+        elif command_verb == "GET_STATUS":
             return self._get_status()
 
-        elif command == "LIST_CSV":
+        elif command_verb == "LIST_CSV":
             return self._list_csv_files()
 
-        elif command.startswith("GET_CSV"):
-            # Extract filename
+        elif command_verb == "GET_CSV":
+            # Extract filename (preserve case!)
             print(f"[BTServer] Received GET_CSV command: '{command}'")
-            parts = command.split(" ", 1)
             if len(parts) < 2:
                 return "ERROR: Missing filename"
             filename = parts[1].strip()
@@ -244,7 +247,7 @@ class BluetoothDataloggerServer:
             return self._send_csv_file(filename)
 
         else:
-            return f"ERROR: Unknown command '{command}'"
+            return f"ERROR: Unknown command '{command_verb}'"
 
     def _start_datalogger(self) -> str:
         """Start datalogger process"""
