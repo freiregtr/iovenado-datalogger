@@ -49,14 +49,17 @@ if [ ! -d "$VENV_DIR" ]; then
     echo "ERROR: Virtual environment not found at $VENV_DIR"
     echo "Please run these commands first:"
     echo "  cd $PARENT_DIR"
-    echo "  python3 -m venv venv"
+    echo "  python3 -m venv --system-site-packages venv"
     echo "  source venv/bin/activate"
     echo "  pip install -r requirements.txt"
+    echo
+    echo "Note: python3-bluez will be used from system packages"
     exit 1
 fi
 
 echo
 echo "Using virtual environment: $VENV_DIR"
+echo "Note: python3-bluez installed from system packages"
 
 # Copy service file to systemd
 echo

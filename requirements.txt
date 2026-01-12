@@ -7,7 +7,6 @@ PySide6>=6.5.0
 pyserial>=3.5
 
 # Bluetooth communication (for remote control)
-# Note: pybluez has issues with setuptools>=58
-# Install manually with: pip install git+https://github.com/pybluez/pybluez.git#egg=pybluez
-# Or on Raspberry Pi: sudo apt-get install python3-bluez
-pybluez>=0.23; platform_system == "Linux"
+# NOTE: pybluez is NOT installed via pip due to setuptools compatibility issues
+# On Raspberry Pi, install system package: sudo apt-get install python3-bluez
+# Then create venv with: python3 -m venv --system-site-packages venv
