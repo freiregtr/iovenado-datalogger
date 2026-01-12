@@ -5,9 +5,11 @@ Requires=bluetooth.service
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/iovenado-datalogger
-ExecStart=/home/pi/iovenado-datalogger/venv/bin/python /home/pi/iovenado-datalogger/bluetooth_service/bt_server.py
+User=iovenado
+WorkingDirectory=/home/iovenado/iovenado-datalogger
+ExecStartPre=/usr/bin/hciconfig hci0 up
+ExecStartPre=/usr/bin/hciconfig hci0 piscan
+ExecStart=/home/iovenado/iovenado-datalogger/venv/bin/python /home/iovenado/iovenado-datalogger/bluetooth_service/bt_server.py
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
