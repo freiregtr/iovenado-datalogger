@@ -250,6 +250,10 @@ class MainWindow(QMainWindow):
     @Slot(object)
     def _on_packet_received(self, packet: SensorPacket):
         """Handle received sensor packet"""
+        # DEBUG: Print packet info
+        print(f"[GUI] Packet: lat={packet.latitude:.6f}, lon={packet.longitude:.6f}, "
+              f"fix={packet.gps_fix}, conn={packet.gps_connected}, status=0x{packet.status:02X}")
+
         # Write to CSV if recording
         if self.is_recording:
             self.data_logger.write_packet(packet)

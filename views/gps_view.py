@@ -252,8 +252,8 @@ class GPSView(QWidget):
                 background-color: rgba(231, 76, 60, 0.2);
             """)
 
-        # Update coordinates
-        if gps_connected and gps_fix:
+        # Update coordinates (show even without fix for debugging)
+        if gps_connected:
             # Latitude
             lat_dir = "N" if latitude >= 0 else "S"
             self.lat_value.setText(f"{abs(latitude):011.6f}")
@@ -269,7 +269,7 @@ class GPSView(QWidget):
             self.speed_kmh.setText(f"{speed_knots * 1.852:05.1f}")
             self.speed_mph.setText(f"{speed_knots * 1.15078:05.1f}")
         else:
-            # No data
+            # No connection - show placeholder
             self.lat_value.setText("---.------")
             self.lat_dir.setText("--")
             self.lon_value.setText("---.------")
