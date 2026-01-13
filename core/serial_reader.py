@@ -86,10 +86,12 @@ class SerialPacketReader(QObject):
                 timeout=SERIAL_TIMEOUT
             )
             self.connection_changed.emit(True)
+            print(f"[DEBUG] Serial connected to {self.port} at {self.baudrate}")
 
             while self.running:
                 packet = self._read_packet()
                 if packet:
+                    print(f"[DEBUG] Packet received: ts={packet.timestamp}, status=0x{packet.status:02X}")
                     self.packet_received.emit(packet)
 
         except serial.SerialException as e:
@@ -128,17 +130,23 @@ class SerialPacketReader(QObject):
         # Validate length (min 25 bytes for v2.0 protocol, max ~1400 bytes)
         # Min packet: header(2) + len(2) + ts(4) + status(1) + gps(12) + can_count(1) + checksum(1) + footer(2) = 25
         if length < 25 or length > 1500:
+            print(f"[DEBUG] Invalid length: {length}")
             return None
 
         # Read remaining bytes (length - 4 already read: header + length)
         remaining = self.serial.read(length - 4)
         if len(remaining) < length - 4:
+            print(f"[DEBUG] Incomplete read: got {len(remaining)}, expected {length - 4}")
             return None
 
         # Reconstruct full packet
         raw = PACKET_HEADER + length_bytes + remaining
+        print(f"[DEBUG] Raw packet ({len(raw)} bytes): {raw.hex()}")
 
-        return self._decode_packet(raw)
+        result = self._decode_packet(raw)
+        if result is None:
+            print(f"[DEBUG] Decode failed for packet")
+        return result
 
     def _decode_packet(self, raw: bytes) -> Optional[SensorPacket]:
         """
@@ -160,6 +168,7 @@ class SerialPacketReader(QObject):
         try:
             # Verify footer
             if raw[-2:] != PACKET_FOOTER:
+                print(f"[DEBUG] Footer mismatch: got {raw[-2:].hex()}, expected 0d0a")
                 return None
 
             # Verify checksum (XOR of bytes from offset 4 to before checksum)
@@ -168,6 +177,7 @@ class SerialPacketReader(QObject):
             for b in checksum_data:
                 calculated_checksum ^= b
             if calculated_checksum != raw[-3]:
+                print(f"[DEBUG] Checksum mismatch: calculated 0x{calculated_checksum:02X}, got 0x{raw[-3]:02X}")
                 return None
 
             # Extract fixed fields
