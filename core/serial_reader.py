@@ -85,6 +85,8 @@ class SerialPacketReader(QObject):
                 self.baudrate,
                 timeout=SERIAL_TIMEOUT
             )
+            # Flush any stale data in buffer
+            self.serial.reset_input_buffer()
             self.connection_changed.emit(True)
             print(f"[DEBUG] Serial connected to {self.port} at {self.baudrate}")
 
@@ -134,14 +136,15 @@ class SerialPacketReader(QObject):
             return None
 
         # Read remaining bytes (length - 4 already read: header + length)
-        remaining = self.serial.read(length - 4)
-        if len(remaining) < length - 4:
-            print(f"[DEBUG] Incomplete read: got {len(remaining)}, expected {length - 4}")
+        bytes_to_read = length - 4
+        remaining = self.serial.read(bytes_to_read)
+        if len(remaining) < bytes_to_read:
+            print(f"[DEBUG] Incomplete read: got {len(remaining)}, expected {bytes_to_read}")
             return None
 
-        # Reconstruct full packet
-        raw = PACKET_HEADER + length_bytes + remaining
-        print(f"[DEBUG] Raw packet ({len(raw)} bytes): {raw.hex()}")
+        # Reconstruct full packet - ensure exact length
+        raw = PACKET_HEADER + length_bytes + remaining[:bytes_to_read]
+        print(f"[DEBUG] Raw packet ({len(raw)} bytes, expected {length}): {raw.hex()}")
 
         result = self._decode_packet(raw)
         if result is None:
