@@ -9,12 +9,11 @@ SERIAL_TIMEOUT = 2.0
 PACKET_HEADER = b'\xAA\x55'
 PACKET_FOOTER = b'\x0D\x0A'
 
-# Status byte bit masks
-STATUS_GPS_FIX = 0x01
-STATUS_GPS_CONN = 0x02
-STATUS_LIDAR_CONN = 0x04
-STATUS_CO2_CONN = 0x08
-STATUS_CAN_ACTIVE = 0x10
+# Status byte bit masks (from ESP32 v2.0 protocol)
+STATUS_GPS_FIX = 0x01      # bit 0 - GPS has fix
+STATUS_GPS_CONN = 0x02     # bit 1 - GPS connected
+STATUS_CAN_ACTIVE = 0x04   # bit 2 - CAN traffic detected
+# Note: Lidar and CO2 now connect directly to Pi, not via ESP32
 
 # View settings
 GPS_TIME_WINDOW = 60       # seconds

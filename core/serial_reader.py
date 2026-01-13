@@ -3,6 +3,17 @@ IOVENADO DataLogger - Serial Packet Reader
 
 Reads binary packets from ESP32 via UART and emits Qt signals.
 Runs in a separate QThread for non-blocking operation.
+
+Protocol v2.0 (ESP32 sends GPS + CAN only):
+- Header: 0xAA 0x55
+- Length: 2 bytes (uint16 LE) - total packet length
+- Timestamp: 4 bytes (uint32 LE)
+- Status: 1 byte (bitmap: bit0=GPS_FIX, bit1=GPS_CONN, bit2=CAN_ACTIVE)
+- GPS: lat(4) + lon(4) + speed(4) = 12 bytes (float LE)
+- CAN count: 1 byte
+- CAN messages: 13 bytes each (id:4 + dlc:1 + data:8)
+- Checksum: 1 byte (XOR of bytes from offset 4 to before checksum)
+- Footer: 0x0D 0x0A
 """
 
 import struct
@@ -14,8 +25,7 @@ from .packet import SensorPacket, CANMessage
 from config.settings import (
     SERIAL_PORT, SERIAL_BAUDRATE, SERIAL_TIMEOUT,
     PACKET_HEADER, PACKET_FOOTER,
-    STATUS_GPS_FIX, STATUS_GPS_CONN,
-    STATUS_LIDAR_CONN, STATUS_CO2_CONN, STATUS_CAN_ACTIVE
+    STATUS_GPS_FIX, STATUS_GPS_CONN, STATUS_CAN_ACTIVE
 )
 
 try:
@@ -115,8 +125,9 @@ class SerialPacketReader(QObject):
             return None
         length = struct.unpack('<H', length_bytes)[0]
 
-        # Validate length (min 31 bytes, max ~1300 bytes)
-        if length < 31 or length > 1500:
+        # Validate length (min 25 bytes for v2.0 protocol, max ~1400 bytes)
+        # Min packet: header(2) + len(2) + ts(4) + status(1) + gps(12) + can_count(1) + checksum(1) + footer(2) = 25
+        if length < 25 or length > 1500:
             return None
 
         # Read remaining bytes (length - 4 already read: header + length)
@@ -130,14 +141,29 @@ class SerialPacketReader(QObject):
         return self._decode_packet(raw)
 
     def _decode_packet(self, raw: bytes) -> Optional[SensorPacket]:
-        """Decode binary packet into SensorPacket"""
+        """
+        Decode binary packet into SensorPacket.
+
+        Protocol v2.0 layout (ESP32 sends GPS + CAN only):
+        [0-1]   Header: 0xAA 0x55
+        [2-3]   Length: uint16 LE (total packet size)
+        [4-7]   Timestamp: uint32 LE (millis)
+        [8]     Status: bitmap (bit0=GPS_FIX, bit1=GPS_CONN, bit2=CAN_ACTIVE)
+        [9-12]  Latitude: float LE
+        [13-16] Longitude: float LE
+        [17-20] Speed (knots): float LE
+        [21]    CAN count: uint8
+        [22+]   CAN messages: 13 bytes each (id:4 + dlc:1 + data:8)
+        [-3]    Checksum: XOR of bytes [4] to [-4]
+        [-2,-1] Footer: 0x0D 0x0A
+        """
         try:
             # Verify footer
             if raw[-2:] != PACKET_FOOTER:
                 return None
 
-            # Verify checksum (XOR of bytes from length to before checksum)
-            checksum_data = raw[2:-3]  # Skip header, checksum, and footer
+            # Verify checksum (XOR of bytes from offset 4 to before checksum)
+            checksum_data = raw[4:-3]  # From timestamp to before checksum
             calculated_checksum = 0
             for b in checksum_data:
                 calculated_checksum ^= b
@@ -148,22 +174,15 @@ class SerialPacketReader(QObject):
             timestamp = struct.unpack('<I', raw[4:8])[0]
             status = raw[8]
 
-            # GPS data (offsets 9-20)
+            # GPS data (offsets 9-21)
             latitude = struct.unpack('<f', raw[9:13])[0]
             longitude = struct.unpack('<f', raw[13:17])[0]
             speed_knots = struct.unpack('<f', raw[17:21])[0]
 
-            # Lidar data (offsets 21-24)
-            distance_cm = struct.unpack('<H', raw[21:23])[0]
-            lidar_strength = struct.unpack('<H', raw[23:25])[0]
-
-            # CO2 data (offsets 25-26)
-            co2_ppm = struct.unpack('<H', raw[25:27])[0]
-
-            # CAN data
-            can_count = raw[27]
+            # CAN data (v2.0: starts at offset 21)
+            can_count = raw[21]
             can_messages = []
-            offset = 28
+            offset = 22
 
             for _ in range(can_count):
                 if offset + 13 > len(raw) - 3:  # Ensure enough bytes
@@ -182,11 +201,12 @@ class SerialPacketReader(QObject):
                 latitude=latitude,
                 longitude=longitude,
                 speed_knots=speed_knots,
-                lidar_connected=bool(status & STATUS_LIDAR_CONN),
-                distance_cm=distance_cm,
-                lidar_strength=lidar_strength,
-                co2_connected=bool(status & STATUS_CO2_CONN),
-                co2_ppm=co2_ppm,
+                # Lidar and CO2 will come from Pi sensors later (v2.0: not in ESP32 packet)
+                lidar_connected=False,
+                distance_cm=0,
+                lidar_strength=0,
+                co2_connected=False,
+                co2_ppm=0,
                 can_active=bool(status & STATUS_CAN_ACTIVE),
                 can_messages=can_messages
             )

@@ -1,18 +1,18 @@
 """
 IOVENADO DataLogger - Packet Data Structures
 
-Binary packet format from ESP32:
+Binary packet format from ESP32 (v2.0 - GPS + CAN only):
 - Header: 0xAA 0x55
-- Length: 2 bytes (uint16 LE)
+- Length: 2 bytes (uint16 LE) - total packet size
 - Timestamp: 4 bytes (uint32 LE) - millis() from ESP32
-- Status: 1 byte (bitmap)
-- GPS: lat(4) + lon(4) + speed(4) = 12 bytes
-- Lidar: distance(2) + strength(2) = 4 bytes
-- CO2: ppm(2) = 2 bytes
+- Status: 1 byte (bitmap: bit0=GPS_FIX, bit1=GPS_CONN, bit2=CAN_ACTIVE)
+- GPS: lat(4) + lon(4) + speed(4) = 12 bytes (float LE)
 - CAN count: 1 byte
 - CAN messages: 13 bytes each (id:4 + dlc:1 + data:8)
-- Checksum: 1 byte (XOR)
+- Checksum: 1 byte (XOR of bytes from offset 4 to before checksum)
 - Footer: 0x0D 0x0A
+
+Note: Lidar and CO2 sensors now connect directly to Pi (not via ESP32).
 """
 
 from dataclasses import dataclass, field

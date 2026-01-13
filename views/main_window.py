@@ -330,23 +330,21 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Error: {error_msg}")
 
     def _update_sensor_status(self, status: int):
-        """Update sensor status display"""
+        """Update sensor status display (v2.0 protocol from ESP32)"""
         sensors = []
 
+        # ESP32 v2.0 status bits: bit0=GPS_FIX, bit1=GPS_CONN, bit2=CAN_ACTIVE
         if status & 0x02:  # GPS_CONN
             if status & 0x01:  # GPS_FIX
                 sensors.append("GPS*")
             else:
                 sensors.append("GPS")
 
-        if status & 0x04:  # LIDAR_CONN
-            sensors.append("LIDAR")
-
-        if status & 0x08:  # CO2_CONN
-            sensors.append("CO2")
-
-        if status & 0x10:  # CAN_ACTIVE
+        if status & 0x04:  # CAN_ACTIVE
             sensors.append("CAN")
+
+        # Note: Lidar and CO2 now connect directly to Pi, not via ESP32
+        # When Pi sensors are implemented, add their status here
 
         if sensors:
             self.sensor_status.setText(f"Sensors: {', '.join(sensors)}")
