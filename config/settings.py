@@ -2,7 +2,7 @@
 
 # Serial communication
 SERIAL_PORT = '/dev/ttyAMA0'  # Raspberry Pi UART
-SERIAL_BAUDRATE = 115200
+SERIAL_BAUDRATE = 9600
 SERIAL_TIMEOUT = 2.0
 
 # Packet protocol
