@@ -2,7 +2,7 @@
 IOVENADO DataLogger - Main Window
 
 Main application window with tabbed interface for sensor views.
-Manages serial connection and data distribution to views.
+Manages dual ESP32 serial connection and data distribution to views.
 """
 
 from PySide6.QtWidgets import (
@@ -19,7 +19,7 @@ from config.settings import (
     DATA_OUTPUT_DIR
 )
 from core.packet import SensorPacket
-from core.serial_reader import SerialPacketReader, MockSerialReader
+from core.serial_reader import DualPacketSynchronizer
 from core.data_logger import CSVDataLogger
 from .gps_view import GPSView
 from .lidar_view import LidarView
@@ -32,15 +32,19 @@ class MainWindow(QMainWindow):
     """
     Main application window.
     Contains tabbed views for each sensor and overall dashboard.
+    Reads from two ESP32 devices simultaneously.
     """
 
-    def __init__(self, use_mock: bool = False):
+    def __init__(self):
         super().__init__()
-        self.use_mock = use_mock
-        self.serial_reader = None
+        self.synchronizer = None
         self.views = {}
         self.data_logger = CSVDataLogger(DATA_OUTPUT_DIR)
         self.is_recording = False
+
+        # Connection states for each ESP32
+        self._esp32_1_connected = False
+        self._esp32_2_connected = False
 
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.setMinimumSize(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
@@ -88,19 +92,32 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        # Top status bar
+        # Top status bar with ESP32 connection indicators
         status_bar = QHBoxLayout()
 
-        self.connection_status = QLabel("DISCONNECTED")
-        self.connection_status.setStyleSheet(f"""
+        # ESP32 #1 indicator (GPS + CAN)
+        self.esp32_1_status = QLabel("ESP32-1: --")
+        self.esp32_1_status.setStyleSheet(f"""
             color: {COLOR_DISCONNECTED};
             font-weight: bold;
-            font-size: 14px;
-            padding: 5px 15px;
+            font-size: 12px;
+            padding: 5px 10px;
             background-color: rgba(231, 76, 60, 0.2);
             border-radius: 5px;
         """)
-        status_bar.addWidget(self.connection_status)
+        status_bar.addWidget(self.esp32_1_status)
+
+        # ESP32 #2 indicator (Lidar + CO2)
+        self.esp32_2_status = QLabel("ESP32-2: --")
+        self.esp32_2_status.setStyleSheet(f"""
+            color: {COLOR_DISCONNECTED};
+            font-weight: bold;
+            font-size: 12px;
+            padding: 5px 10px;
+            background-color: rgba(231, 76, 60, 0.2);
+            border-radius: 5px;
+        """)
+        status_bar.addWidget(self.esp32_2_status)
 
         status_bar.addStretch()
 
@@ -137,18 +154,6 @@ class MainWindow(QMainWindow):
 
         # Bottom controls
         controls = QHBoxLayout()
-
-        # Mock mode indicator
-        if self.use_mock:
-            mock_label = QLabel("MOCK MODE")
-            mock_label.setStyleSheet("""
-                color: #f39c12;
-                font-weight: bold;
-                padding: 5px 10px;
-                background-color: rgba(243, 156, 18, 0.2);
-                border-radius: 3px;
-            """)
-            controls.addWidget(mock_label)
 
         controls.addStretch()
 
@@ -233,31 +238,24 @@ class MainWindow(QMainWindow):
         """)
 
     def _init_serial(self):
-        """Initialize serial reader"""
-        if self.use_mock:
-            self.serial_reader = MockSerialReader()
-        else:
-            self.serial_reader = SerialPacketReader()
+        """Initialize dual ESP32 packet synchronizer"""
+        self.synchronizer = DualPacketSynchronizer()
 
         # Connect signals
-        self.serial_reader.packet_received.connect(self._on_packet_received)
-        self.serial_reader.connection_changed.connect(self._on_connection_changed)
-        self.serial_reader.error_occurred.connect(self._on_error)
+        self.synchronizer.packet_received.connect(self._on_packet_received)
+        self.synchronizer.esp32_1_connected.connect(self._on_esp32_1_connection)
+        self.synchronizer.esp32_2_connected.connect(self._on_esp32_2_connection)
+        self.synchronizer.error_occurred.connect(self._on_error)
 
-        # Start reading
-        self.serial_reader.start()
+        # Start reading from both ESP32s
+        self.synchronizer.start()
 
     @Slot(object)
     def _on_packet_received(self, packet: SensorPacket):
-        """Handle received sensor packet"""
-        # DEBUG: Print packet info
-        print(f"[GUI] Packet: lat={packet.latitude:.6f}, lon={packet.longitude:.6f}, "
-              f"fix={packet.gps_fix}, conn={packet.gps_connected}, status=0x{packet.status:02X}")
-
+        """Handle received sensor packet (fused from both ESP32s)"""
         # Write to CSV if recording
         if self.is_recording:
             self.data_logger.write_packet(packet)
-            # Update recording status
             self.recording_status.setText(
                 f"Recording: {self.data_logger.packet_count} packets"
             )
@@ -294,7 +292,7 @@ class MainWindow(QMainWindow):
         )
 
         # Update sensor status in header
-        self._update_sensor_status(packet.status)
+        self._update_sensor_status(packet)
 
         # Update status bar
         self.statusBar().showMessage(
@@ -303,52 +301,82 @@ class MainWindow(QMainWindow):
         )
 
     @Slot(bool)
-    def _on_connection_changed(self, connected: bool):
-        """Handle connection state change"""
+    def _on_esp32_1_connection(self, connected: bool):
+        """Handle ESP32 #1 connection state change"""
+        self._esp32_1_connected = connected
         if connected:
-            self.connection_status.setText("CONNECTED")
-            self.connection_status.setStyleSheet(f"""
+            self.esp32_1_status.setText("ESP32-1: GPS+CAN")
+            self.esp32_1_status.setStyleSheet(f"""
                 color: {COLOR_CONNECTED};
                 font-weight: bold;
-                font-size: 14px;
-                padding: 5px 15px;
+                font-size: 12px;
+                padding: 5px 10px;
                 background-color: rgba(46, 204, 113, 0.2);
                 border-radius: 5px;
             """)
-            self.statusBar().showMessage("Connected to ESP32")
         else:
-            self.connection_status.setText("DISCONNECTED")
-            self.connection_status.setStyleSheet(f"""
+            self.esp32_1_status.setText("ESP32-1: --")
+            self.esp32_1_status.setStyleSheet(f"""
                 color: {COLOR_DISCONNECTED};
                 font-weight: bold;
-                font-size: 14px;
-                padding: 5px 15px;
+                font-size: 12px;
+                padding: 5px 10px;
                 background-color: rgba(231, 76, 60, 0.2);
                 border-radius: 5px;
             """)
-            self.statusBar().showMessage("Disconnected")
+
+    @Slot(bool)
+    def _on_esp32_2_connection(self, connected: bool):
+        """Handle ESP32 #2 connection state change"""
+        self._esp32_2_connected = connected
+        if connected:
+            self.esp32_2_status.setText("ESP32-2: Lidar+CO2")
+            self.esp32_2_status.setStyleSheet(f"""
+                color: {COLOR_CONNECTED};
+                font-weight: bold;
+                font-size: 12px;
+                padding: 5px 10px;
+                background-color: rgba(46, 204, 113, 0.2);
+                border-radius: 5px;
+            """)
+        else:
+            self.esp32_2_status.setText("ESP32-2: --")
+            self.esp32_2_status.setStyleSheet(f"""
+                color: {COLOR_DISCONNECTED};
+                font-weight: bold;
+                font-size: 12px;
+                padding: 5px 10px;
+                background-color: rgba(231, 76, 60, 0.2);
+                border-radius: 5px;
+            """)
 
     @Slot(str)
     def _on_error(self, error_msg: str):
-        """Handle error from serial reader"""
+        """Handle error from serial readers"""
         self.statusBar().showMessage(f"Error: {error_msg}")
 
-    def _update_sensor_status(self, status: int):
-        """Update sensor status display (v2.0 protocol from ESP32)"""
+    def _update_sensor_status(self, packet: SensorPacket):
+        """Update sensor status display with all 4 sensors"""
         sensors = []
 
-        # ESP32 v2.0 status bits: bit0=GPS_FIX, bit1=GPS_CONN, bit2=CAN_ACTIVE
-        if status & 0x02:  # GPS_CONN
-            if status & 0x01:  # GPS_FIX
+        # GPS (from ESP32 #1)
+        if packet.gps_connected:
+            if packet.gps_fix:
                 sensors.append("GPS*")
             else:
                 sensors.append("GPS")
 
-        if status & 0x04:  # CAN_ACTIVE
+        # CAN (from ESP32 #1)
+        if packet.can_active:
             sensors.append("CAN")
 
-        # Note: Lidar and CO2 now connect directly to Pi, not via ESP32
-        # When Pi sensors are implemented, add their status here
+        # Lidar (from ESP32 #2)
+        if packet.lidar_connected:
+            sensors.append("LIDAR")
+
+        # CO2 (from ESP32 #2)
+        if packet.co2_connected:
+            sensors.append("CO2")
 
         if sensors:
             self.sensor_status.setText(f"Sensors: {', '.join(sensors)}")
@@ -362,9 +390,9 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Views reset")
 
     def _reconnect(self):
-        """Reconnect to serial port"""
-        if self.serial_reader:
-            self.serial_reader.stop()
+        """Reconnect to serial ports"""
+        if self.synchronizer:
+            self.synchronizer.stop()
 
         self._reset_views()
         self._init_serial()
@@ -476,8 +504,8 @@ class MainWindow(QMainWindow):
         if self.is_recording:
             self.data_logger.stop_session()
 
-        # Stop serial reader
-        if self.serial_reader:
-            self.serial_reader.stop()
+        # Stop synchronizer
+        if self.synchronizer:
+            self.synchronizer.stop()
 
         event.accept()
